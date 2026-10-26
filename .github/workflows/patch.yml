@@ -1,0 +1,42 @@
+name: Patch Rootful Packages
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 350
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install dpkg ldid bash
+          curl -sL -o /tmp/patcher.pkg "https://github.com/NightwindDev/rootless-patcher/releases/download/0.0.1/com.nightwind.rootless-patcher_0.0.1.pkg"
+          pkgutil --expand-full /tmp/patcher.pkg /tmp/patcher_extract || true
+          find /tmp/patcher_extract -type f -name "rootless-patcher" -exec cp {} /usr/local/bin/ \; || true
+          chmod +x /usr/local/bin/rootless-patcher || true
+
+      - name: Collect and patch
+        run: |
+          chmod +x scripts/worker.sh
+          bash scripts/worker.sh
+
+      - name: Publish to Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x scripts/batch_publish.sh
+          bash scripts/batch_publish.sh
+
+      - name: Trigger Main Repo Update
+        run: |
+          curl -s -X POST \
+            -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/locationovo/repo/dispatches \
+            -d '{"event_type": "update-index"}'
